@@ -1,6 +1,6 @@
 {
   "name": "signalk-n2k-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Signal K Plugin That Serves RAW n2k Data",
   "main": "dist/index.js",
   "scripts": {
