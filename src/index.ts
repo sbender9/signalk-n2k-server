@@ -16,7 +16,19 @@
 import { ServerAPI, Plugin } from '@signalk/server-api'
 import { createServer, Server, Socket } from 'net'
 import { Unsubscribes } from '@signalk/server-api'
-import { parseN2kString, toActisenseSerialFormat } from '@canboat/canboatjs'
+import {
+  parseN2kString,
+  toActisenseSerialFormat,
+  encodeCandump2,
+  encodeActisense,
+  encodeActisenseN2KACSII,
+  encodeCandump1,
+  encodeCandump3,
+  encodeMXPGN,
+  encodePCDIN,
+  encodePDGY,
+  encodeYDRAWFull
+} from '@canboat/canboatjs'
 import split from 'split'
 
 const start = (app: ServerAPI) => {
@@ -43,18 +55,67 @@ const start = (app: ServerAPI) => {
         const unsubscibes: Unsubscribes = []
 
         ;(app as any).on('canboatjs:rawoutput', (output: any) => {
+          let parsed: any
+          const format = props.format || 'actisense-n2k-ascii'
           if (typeof output !== 'string') {
             const timestamp = new Date().toISOString()
-            socket.write(
-              binToActisense(
-                output.pgn,
-                timestamp,
-                output.data,
-                output.length
-              ) + '\n'
+            parsed = binToActisense(
+              output.pgn,
+              timestamp,
+              output.data,
+              output.length
             )
+            if (format === 'actisense') {
+              socket.write(parsed + '\n')
+              return
+            }
           } else {
-            socket.write(output + '\n')
+            parsed = parseN2kString(output)
+          }
+          if (parsed === null) {
+            return
+          }
+          let res: string | string[] | undefined
+
+          switch (format) {
+            case 'actisense':
+              res = encodeActisense(parsed)
+              break
+            case 'ydraw':
+              res = encodeYDRAWFull(parsed)
+              break
+            case 'pcdin':
+              res = encodePCDIN(parsed)
+              break
+            case 'mxpgn':
+              res = encodeMXPGN(parsed)
+              break
+            case 'ikonvert':
+              res = encodePDGY(parsed)
+              break
+            case 'candump1':
+              res = encodeCandump1(parsed)
+              break
+            case 'candump2':
+              res = encodeCandump2(parsed)
+              break
+            case 'candump3':
+              res = encodeCandump3(parsed)
+              break
+            case 'canboat':
+              res = output
+              break
+            case 'actisense-n2k-ascii':
+              res = encodeActisenseN2KACSII(parsed)
+              break
+            default:
+              res = undefined
+              break
+          }
+          if (typeof res === 'string') {
+            socket.write(res + '\n')
+          } else if (Array.isArray(res)) {
+            res.forEach((r) => socket.write(r + '\n'))
           }
         })
 
@@ -109,6 +170,24 @@ const start = (app: ServerAPI) => {
             title: 'Port',
             description: 'The port on which the N2K server listens',
             default: 3001
+          },
+          format: {
+            type: 'string',
+            title: 'Format',
+            description: 'The format of the N2K data',
+            enum: [
+              'actisense',
+              'actisense-n2k-ascii',
+              'ydraw',
+              'pcdin',
+              'mxpgn',
+              'ikonvert',
+              'candump1',
+              'candump2',
+              'candump3',
+              'canboat'
+            ],
+            default: 'actisense-n2k-ascii'
           }
         }
       }
@@ -128,8 +207,8 @@ const start = (app: ServerAPI) => {
 
 function socketMessageHandler(
   app: ServerAPI,
-  socket: Socket,
-  unsubscribes: Unsubscribes
+  _socket: Socket,
+  _unsubscribes: Unsubscribes
 ) {
   return (msg: any) => {
     //;(app as any).emit('nmea2000Out', msg)
@@ -154,7 +233,6 @@ export function binToActisense(
   data: string[],
   length: number
 ) {
-  const arr: string[] = []
   return (
     timestamp +
     `,${pgn.prio},${pgn.pgn},${pgn.src},${pgn.dst},${length},` +
