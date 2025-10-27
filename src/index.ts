@@ -59,16 +59,17 @@ const start = (app: ServerAPI) => {
           const format = props.format || 'actisense-n2k-ascii'
           if (typeof output !== 'string') {
             const timestamp = new Date().toISOString()
-            parsed = binToActisense(
+            let actisene = binToActisense(
               output.pgn,
               timestamp,
               output.data,
               output.length
             )
             if (format === 'actisense') {
-              socket.write(parsed + '\n')
+              socket.write(actisene + '\n')
               return
             }
+            parsed = parseN2kString(actisene)
           } else {
             parsed = parseN2kString(output)
           }
